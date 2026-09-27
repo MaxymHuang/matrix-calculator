@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matrix Calculator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Matrix Calculator</h1>
+  <p class="sub">Exact fraction arithmetic for any dimension · enter integers, decimals or fractions like <code>-3/4</code></p>
+</header>
+
+<main>
+  <section class="inputs">
+    <div class="matrix-panel" id="panel-A"></div>
+    <div class="matrix-panel" id="panel-B"></div>
+  </section>
+
+  <section class="ops">
+    <div class="op-group">
+      <h3>Two-matrix operations</h3>
+      <div class="btns">
+        <button data-op="mul">A × B</button>
+        <button data-op="mulBA">B × A</button>
+        <button data-op="add">A + B</button>
+        <button data-op="sub">A − B</button>
+        <button data-op="dot" title="A and B must be vectors (1×n or n×1)">A · B &nbsp;(dot)</button>
+        <button data-op="cross" title="A and B must be 3-component vectors">A ⨯ B &nbsp;(cross)</button>
+      </div>
+    </div>
+    <div class="op-group">
+      <h3>Single-matrix operations on
+        <span class="seg" id="target-seg">
+          <button class="active" data-target="A">A</button><button data-target="B">B</button>
+        </span>
+      </h3>
+      <div class="btns">
+        <button data-op="transpose">Transpose</button>
+        <button data-op="rref">RREF</button>
+        <button data-op="det">Determinant</button>
+        <button data-op="inverse">Inverse (Gauss–Jordan)</button>
+        <button data-op="eigen">Eigenvalues &amp; eigenvectors</button>
+        <button data-op="subspaces">Four fundamental subspaces</button>
+        <button data-op="diag">Diagonalize</button>
+      </div>
+    </div>
+    <div class="op-group settings">
+      <label>Show numbers as
+        <select id="num-mode">
+          <option value="frac">exact fractions</option>
+          <option value="dec">decimals</option>
+        </select>
+      </label>
+      <label>Decimal places <input id="precision" type="number" min="0" max="12" value="4"></label>
+      <label>Examples
+        <select id="examples"><option value="">— load an example —</option></select>
+      </label>
+      <button id="clear-results" class="ghost">Clear results</button>
+    </div>
+  </section>
+
+  <section id="results"></section>
+</main>
+
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
