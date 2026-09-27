@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Matrix Calculator</h1>
-  <p class="sub">Exact fraction arithmetic for any dimension · enter integers, decimals or fractions like <code>-3/4</code></p>
+  <p class="sub">Exact arithmetic for any dimension — numbers, symbols and trigonometry. Enter <code>-3/4</code>, <code>x</code>, <code>alpha</code>, <code>sin(theta)</code>, <code>sqrt(2)</code>.</p>
 </header>
 
 <main>
@@ -58,12 +58,19 @@
         <select id="examples"><option value="">— load an example —</option></select>
       </label>
       <button id="clear-results" class="ghost">Clear results</button>
+      <label class="wide">Variables
+        <input id="assign" type="text" spellcheck="false" placeholder="x = 2, theta = pi/4">
+      </label>
+      <span id="assign-note" class="note"></span>
+      <span id="settings-extra"></span>
     </div>
   </section>
 
   <section id="results"></section>
 </main>
 
+<script src="fraction.js"></script>
+<script src="symbolic.js"></script>
 <script src="core.js"></script>
 <script src="app.js"></script>
 </body>

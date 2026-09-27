@@ -115,3 +115,20 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 .matwrap .send { display: flex; gap: 4px; }
 .vecs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .trivial { font-family: var(--mono); }
+
+/* ---------- symbolic additions ---------- */
+.matrix-panel .varnote { color: var(--accent); font-size: 12px; font-family: var(--mono); margin-left: auto; }
+.grid input { width: 64px; min-width: 64px; }
+.settings label.wide { flex: 1 1 260px; }
+.settings label.wide input { flex: 1; min-width: 150px; }
+#assign.bad { border-color: var(--err); background: var(--err-soft); }
+#assign-note { font-family: var(--mono); font-size: 12px; }
+#settings-extra { flex-basis: 100%; }
+.badge.warn { background: #fef0c7; color: #93370d; }
+.note.approx { color: var(--muted); font-family: var(--mono); }
+.note.assume { background: #fffaeb; border-left: 3px solid #f79009; padding: 6px 10px; border-radius: 0 6px 6px 0; }
+details.help { margin-top: 6px; }
+.helptable { border-collapse: collapse; margin: 6px 0; font-size: 13px; }
+.helptable td { padding: 2px 14px 2px 0; vertical-align: top; }
+.helptable td:first-child { color: var(--muted); white-space: nowrap; }
+.mat td { max-width: 320px; white-space: normal; }
