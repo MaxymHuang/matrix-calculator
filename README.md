@@ -26,6 +26,8 @@ A = [ cos θ  −sin θ ]        det A = 1          λ = cos θ ± i·sin θ
 | **Projection onto a vector** | `proj_v u = (u·v)/(v·v) · v`, with the coefficient, signed scalar component, orthogonal remainder, and a check that the remainder is ⟂ `v`. |
 | **Projection onto a vector space** | Projects a vector onto the column space of a matrix (dependent columns are fine — a pivot basis `B` is extracted). Solves the normal equations `(BᵀB)x̂ = Bᵀb`, shows `p = Bx̂`, the error `e = b − p`, the distance `‖e‖`, and the projection matrix `P = B(BᵀB)⁻¹Bᵀ`. |
 | **Projection matrix** | `P` for the column space of a matrix, with `P² = P`, `Pᵀ = P`, rank = trace checks and the complement `I − P`. |
+| **Norm** | Vector: exact 2-norm, 1-norm, ∞-norm and the unit vector `v/‖v‖`. Matrix: Frobenius, 1-norm (max column sum), ∞-norm (max row sum) and, for matrices without symbols, the spectral norm `√λmax(AᵀA)`. |
+| **Gram–Schmidt (QR)** | Orthogonalizes the columns exactly, showing each projection subtracted, then normalizes to `Q` and computes `R = QᵀA`. Verifies `QR = A` and `QᵀQ = I`; dependent columns are detected and skipped (reduced QR). |
 
 Pick the direction with the **Projection** selector (*A onto B* or *B onto A*): the first matrix is the vector being projected, the second is the vector or matrix it is projected onto. Projections are over real vectors; entries containing `i` are rejected. With symbolic entries the divisor (`v·v`, Gram-matrix pivots) is reported under **Assumes**.
 
@@ -86,7 +88,7 @@ Two further limits are stated in the UI rather than hidden:
 - Arrow keys and Enter move between cells; cells widen to fit expressions
 - **Identity / Zeros / Random / Clear** fills, transpose in place, copy between A and B
 - Result matrices carry **→ A** / **→ B** buttons to feed them into the next operation
-- Toggle exact fractions vs decimals at any time
+- A **settings sidebar** with collapsible sections — Examples, Variables, Display (fractions vs decimals, precision) and Syntax help — which the **☰ Settings** button hides entirely (it starts hidden on phones)
 - Nineteen built-in examples, numeric and symbolic
 
 Matrices up to 12×12 are supported through the UI.

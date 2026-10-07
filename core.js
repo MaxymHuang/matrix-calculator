@@ -548,6 +548,84 @@ function projectionMatrix(M) {
     complement: sub(I, P), trace: trace(P) };
 }
 
+/* ------------------------------------------------------------------ norms */
+const absExpr = (x) => SY.applyFn('abs', x);
+// the entry (or sum) with the largest numeric value under env; null if any can't be evaluated
+function maxBy(items, env) {
+  let best = -1, bestVal = -Infinity;
+  for (let i = 0; i < items.length; i++) {
+    const v = items[i].evalNum(env);
+    if (v === null) return null;
+    if (v > bestVal) { bestVal = v; best = i; }
+  }
+  return best < 0 ? null : { index: best, value: items[best] };
+}
+// 2-norm, 1-norm and ∞-norm of a vector, plus the unit vector v/‖v‖
+function vectorNorms(v, env = {}) {
+  assertReal(v, 'vectors');
+  const sq = dot(v, v);
+  const l2 = sqrtExpr(sq);
+  let l1 = Expr.ZERO;
+  for (const x of v) l1 = l1.add(absExpr(x));
+  const mx = maxBy(v.map(absExpr), env);
+  const zero = sq.isZero();
+  const assumptions = [];
+  addAssumption(assumptions, sq);
+  return { n: v.length, sq, l2, l1, linf: mx, zero, assumptions,
+    unit: zero ? null : v.map((x) => x.div(l2)) };
+}
+// Frobenius, 1 (max column sum), ∞ (max row sum) and — for numeric matrices — spectral norm
+function matrixNorms(M, env = {}) {
+  for (const r of M) assertReal(r, 'matrices');
+  const [m, n] = dims(M);
+  let sq = Expr.ZERO;
+  for (const r of M) for (const x of r) sq = sq.add(x.mul(x));
+  const colSums = Array.from({ length: n }, (_, j) => M.reduce((s, r) => s.add(absExpr(r[j])), Expr.ZERO));
+  const rowSums = M.map((r) => r.reduce((s, x) => s.add(absExpr(x)), Expr.ZERO));
+  const l1 = maxBy(colSums, env), linf = maxBy(rowSums, env);
+  let spectral = null;
+  if (!isSymbolic(M)) {
+    const ev = eigen(mul(transpose(M), M)).eigenvalues;
+    const top = ev.reduce((b, e) => (e.approx && (!b || e.approx.re > b.approx.re) ? e : b), null);
+    if (top) spectral = { value: top.kind === 'exact' ? sqrtExpr(top.value) : null, approx: Math.sqrt(Math.max(0, top.approx.re)) };
+  }
+  return { m, n, frobenius: sqrtExpr(sq), frobeniusSq: sq, l1, linf, colSums, rowSums, spectral };
+}
+
+/* ------------------------------------------- Gram–Schmidt and QR (exact) */
+// Orthogonalise the columns of M left to right:  vⱼ = aⱼ − Σᵢ (aⱼ·vᵢ)/(vᵢ·vᵢ) vᵢ.
+// A column that is already in the span of the earlier ones gives vⱼ = 0 and is skipped.
+// Q holds vᵢ/‖vᵢ‖ and R = QᵀM, so that M = QR (reduced QR when columns are dependent).
+function gramSchmidt(M) {
+  const [m, n] = dims(M);
+  for (const r of M) assertReal(r, 'matrices');
+  const cols = transpose(M);
+  const ortho = [], dots = [], used = [], dependent = [], steps = [], assumptions = [];
+  cols.forEach((a, j) => {
+    let v = a.slice();
+    const terms = [];
+    ortho.forEach((u, i) => {
+      const coef = dot(a, u).div(dots[i]);
+      terms.push({ from: used[i], coef, vec: u.map((x) => x.mul(coef)), num: dot(a, u), den: dots[i] });
+      v = v.map((x, k) => x.sub(u[k].mul(coef)));
+    });
+    const zero = v.every((x) => x.isZero());
+    steps.push({ col: j, a, terms, v, zero });
+    if (zero) { dependent.push(j); return; }
+    const vv = dot(v, v);
+    ortho.push(v); dots.push(vv); used.push(j);
+    addAssumption(assumptions, vv);
+  });
+  const norms = ortho.map(norm);
+  const unit = ortho.map((u, i) => u.map((x) => x.div(norms[i])));
+  const r = ortho.length;
+  const Q = r ? transpose(unit) : [];
+  const R = unit.map((e) => cols.map((a) => dot(e, a)));
+  const verified = r === 0 ? M.every((row) => row.every((x) => x.isZero())) : mul(Q, R).every((row, i) => row.every((x, j) => x.eq(M[i][j])));
+  const orthonormal = r === 0 ? true : mul(transpose(Q), Q).every((row, i) => row.every((x, j) => x.eq(i === j ? Expr.ONE : Expr.ZERO)));
+  return { m, n, rank: r, used, dependent, steps, ortho, dots, norms, unit, Q, R, verified, orthonormal, assumptions };
+}
+
 const api = {
   Expr, E, display, sqrtExpr, Frac, F, C, isqrt, simplifySqrt,
   dims, zeros, identity, clone, transpose, add, sub, mul, scaleMat, trace, parseMatrix, augment,
@@ -556,6 +634,7 @@ const api = {
   crref, complexNullspace, complexInverse, eigen, diagonalize, approxOf, quadraticRoots,
   asVector, dot, cross, norm,
   projectOntoVector, projectOntoColumnSpace, projectionMatrix,
+  vectorNorms, matrixNorms, gramSchmidt,
 };
 if (isNode) module.exports = api;
 else root.MatrixCore = api;

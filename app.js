@@ -471,6 +471,97 @@ const ops = {
       el('details', { open: '' }, el('summary', {}, 'Show the steps'), projectionSteps(r, M, dst)),
       nonzeroNote(r.assumptions, 'these pivots and Gram-matrix pivots'));
   },
+  norm() {
+    const T = state.target, M = readMatrix(T);
+    const [r, c] = K.dims(M);
+    const line = (label, math, e, extra) => el('p', {}, el('span', { class: 'label' }, label), el('span', { class: 'math' }, math + fmtCell(e)),
+      approxNote(e) ? el('span', { class: 'note approx' }, ' ' + approxNote(e)) : null, extra ? el('span', { class: 'note' }, '  ' + extra) : null);
+    const pick = (res, what) => (res ? line(what.label, what.math(res), res.value, what.extra(res))
+      : el('p', { class: 'note' }, `${what.label} needs numeric values — enter values for the symbols in Variables to compare entries.`));
+    if (r === 1 || c === 1) {
+      const v = K.asVector(M);
+      const n = K.vectorNorms(v, state.assignNum);
+      const sumSq = v.map((x) => `(${fmtCell(x)})²`).join(' + ');
+      const kids = [
+        row(colVec(v, { caption: T }), opSym('→'), el('span', {}, el('span', { class: 'big' }, `‖${T}‖ = ${fmtCell(n.l2)}`),
+          approxNote(n.l2) ? el('span', { class: 'note approx' }, ' ' + approxNote(n.l2)) : null),
+          n.zero ? el('span', { class: 'badge no' }, 'zero vector') : null),
+        el('p', { class: 'math note' }, `‖v‖₂ = √(v₁² + … + vₙ²) = √(${sumSq}) = √(${fmtCell(n.sq)})` + (`√(${fmtCell(n.sq)})` === fmtCell(n.l2) ? '' : ` = ${fmtCell(n.l2)}`)),
+        line('1-norm', '‖v‖₁ = |v₁| + … + |vₙ| = ', n.l1, '(taxicab / Manhattan length)'),
+        pick(n.linf, { label: '∞-norm', math: (m) => `‖v‖∞ = max |vᵢ| = (entry ${m.index + 1}) `, extra: () => '(largest absolute entry)' }),
+      ];
+      if (n.zero) kids.push(el('p', { class: 'note' }, 'The zero vector has no direction, so it cannot be normalized.'));
+      else {
+        kids.push(row(el('span', { class: 'label' }, 'Unit vector  v / ‖v‖ ='), colVec(n.unit, { caption: 'û', sendable: true })));
+        kids.push(el('p', { class: 'note' }, `Check: ‖û‖ = ${fmtCell(K.norm(n.unit))}  ✓  — same direction as ${T}, length 1.`));
+      }
+      kids.push(nonzeroNote(n.assumptions, 'v · v'));
+      card(`Norm of ${T}  (vector in ℝ${sup(v.length)})`, ...kids);
+      return;
+    }
+    const n = K.matrixNorms(M, state.assignNum);
+    const kids = [
+      row(matrixEl(M, { caption: `${T}  (${r}×${c})` })),
+      line('Frobenius', `‖${T}‖F = √(Σ aᵢⱼ²) = √(${fmtCell(n.frobeniusSq)}) = `, n.frobenius),
+      pick(n.l1, { label: '1-norm', math: (m) => `‖${T}‖₁ = max column sum of |aᵢⱼ| = (column ${m.index + 1}) `, extra: () => `column sums: ${n.colSums.map(fmtCell).join(', ')}` }),
+      pick(n.linf, { label: '∞-norm', math: (m) => `‖${T}‖∞ = max row sum of |aᵢⱼ| = (row ${m.index + 1}) `, extra: () => `row sums: ${n.rowSums.map(fmtCell).join(', ')}` }),
+    ];
+    if (n.spectral) {
+      kids.push(n.spectral.value
+        ? line('Spectral', `‖${T}‖₂ = σmax = √(λmax(${T}ᵀ${T})) = `, n.spectral.value)
+        : el('p', {}, el('span', { class: 'label' }, 'Spectral'), el('span', { class: 'math' }, `‖${T}‖₂ = σmax = √(λmax(${T}ᵀ${T})) ≈ ${fmtDec(n.spectral.approx)}`),
+          el('span', { class: 'note' }, '  (numerical: AᵀA has no closed-form eigenvalues)')));
+    } else {
+      kids.push(el('p', { class: 'note' }, 'The spectral norm (largest singular value) is available for matrices without symbols.'));
+    }
+    card(`Norms of ${T}`, ...kids);
+  },
+  gramschmidt() {
+    const T = state.target, M = readMatrix(T);
+    const g = K.gramSchmidt(M);
+    const sub = (k) => String(k).replace(/\d/g, (d) => '₀₁₂₃₄₅₆₇₈₉'[d]);
+    const kids = [];
+    if (g.rank === 0) {
+      card(`Gram–Schmidt on the columns of ${T}`, el('p', {}, el('span', { class: 'badge warn' }, 'zero matrix'), ` Every column of ${T} is zero, so there is no basis to orthogonalize.`));
+      return;
+    }
+    kids.push(el('p', { class: 'note' }, `Each column is made orthogonal to the ones before it by subtracting its projections: vⱼ = aⱼ − Σ (aⱼ·vᵢ)/(vᵢ·vᵢ) · vᵢ. Normalizing the vⱼ gives Q, and R = Qᵀ${T}, so that ${T} = QR.`));
+    kids.push(row(matrixEl(M, { caption: T }), opSym('='), matrixEl(g.Q, { caption: `Q  (${g.m}×${g.rank}, orthonormal columns)`, sendable: true }),
+      opSym('×'), matrixEl(g.R, { caption: `R  (${g.rank}×${g.n}, upper triangular)`, sendable: true })));
+    kids.push(el('p', { class: 'note' },
+      `Check: Q R = ${T}  ${g.verified ? '✓' : '✗'}     QᵀQ = I  ${g.orthonormal ? '✓' : '✗'}`));
+    if (g.dependent.length) {
+      kids.push(el('p', {}, el('span', { class: 'badge warn' }, 'dependent columns'),
+        ` Column${g.dependent.length === 1 ? '' : 's'} ${g.dependent.map((j) => j + 1).join(', ')} of ${T} already lie${g.dependent.length === 1 ? 's' : ''} in the span of the earlier ones, so ${g.dependent.length === 1 ? 'it was' : 'they were'} skipped. Q has ${g.rank} column${g.rank === 1 ? '' : 's'} (reduced QR); the rank of ${T} is ${g.rank}.`));
+    }
+    // the work, column by column
+    const stepEls = g.steps.map((st) => {
+      const j = st.col;
+      const body = [];
+      if (!st.terms.length) {
+        body.push(el('p', { class: 'note' }, j === 0 ? 'The first column starts the basis: v₁ = a₁.' : `Nothing to subtract: v${sub(j + 1)} = a${sub(j + 1)}.`));
+      } else {
+        for (const t of st.terms) {
+          body.push(el('p', { class: 'math note' },
+            `(a${sub(j + 1)}·v${sub(t.from + 1)}) / (v${sub(t.from + 1)}·v${sub(t.from + 1)}) = (${fmtCell(t.num)}) / (${fmtCell(t.den)}) = ${fmtCell(t.coef)}`));
+        }
+        body.push(row(colVec(st.a, { caption: `a${sub(j + 1)}` }),
+          ...st.terms.flatMap((t) => [opSym('−'), colVec(t.vec, { caption: `(${fmtCell(t.coef)}) · v${sub(t.from + 1)}` })]),
+          opSym('='), colVec(st.v, { caption: `v${sub(j + 1)}` })));
+      }
+      if (st.zero) body.push(el('p', {}, el('span', { class: 'badge warn' }, 'zero'), ` v${sub(j + 1)} = 0, so column ${j + 1} is dependent and is skipped.`));
+      return el('div', { class: 'subspace' }, el('h3', {}, `Column ${j + 1}`), ...body);
+    });
+    kids.push(el('details', { open: '' }, el('summary', {}, `Show the steps (${g.steps.length} column${g.steps.length === 1 ? '' : 's'})`), ...stepEls));
+    // normalization
+    const norms = g.used.map((j, i) => el('p', { class: 'math note' }, `‖v${sub(j + 1)}‖ = √(${fmtCell(g.dots[i])}) = ${fmtCell(g.norms[i])}`));
+    kids.push(el('div', { class: 'subspace' }, el('h3', {}, 'Orthogonal basis, then normalized'),
+      row(el('span', { class: 'label' }, 'Orthogonal (unnormalized):'), matrixEl(K.transpose(g.ortho), { caption: 'v’s as columns', sendable: true })),
+      ...norms,
+      row(el('span', { class: 'label' }, 'Orthonormal  eᵢ = vᵢ / ‖vᵢ‖ :'), vectorList(g.unit, { name: 'e' }))));
+    kids.push(nonzeroNote(g.assumptions, 'each vᵢ · vᵢ'));
+    card(`Gram–Schmidt on the columns of ${T}  (QR factorization)`, ...kids);
+  },
   transpose() { const T = state.target, A = readMatrix(T);
     card(`${T}ᵀ`, row(matrixEl(A, { caption: T }), opSym('→'), matrixEl(K.transpose(A), { caption: `${T}ᵀ`, sendable: true }))); },
 
@@ -639,6 +730,10 @@ const EXAMPLES = [
   { g: 'Numeric', name: 'Projection: dependent spanning columns', A: '3\n4\n5', B: '1 0 1\n0 1 1\n0 0 0' },
   { g: 'Symbolic', name: 'Projection: vector onto vector with symbols', A: 'x\ny', B: 'a\nb' },
   { g: 'Symbolic', name: 'Projection: unit vector direction (θ)', A: 'x\ny', B: 'cos(theta)\nsin(theta)' },
+  { g: 'Numeric', name: 'Gram–Schmidt / QR: independent columns', A: '1 1 0\n1 0 1\n0 1 1', B: '1 0 0\n0 1 0\n0 0 1' },
+  { g: 'Numeric', name: 'Gram–Schmidt: dependent column (reduced QR)', A: '1 2 3\n1 2 4\n0 0 1', B: '1 0 0\n0 1 0\n0 0 1' },
+  { g: 'Numeric', name: 'Norms of a 2×2 matrix', A: '1 2\n3 4', B: '1 0\n0 1' },
+  { g: 'Symbolic', name: 'Gram–Schmidt with symbols', A: '1 x\n1 y', B: '1 0\n0 1' },
   { g: 'Symbolic', name: 'General 2×2 [[a,b],[c,d]] — det & inverse', A: 'a b\nc d', B: '1 0\n0 1' },
   { g: 'Symbolic', name: '2×2 rotation R(θ) — det, inverse, eigen', A: 'cos(theta) -sin(theta)\nsin(theta) cos(theta)', B: 'cos(phi) -sin(phi)\nsin(phi) cos(phi)' },
   { g: 'Symbolic', name: '3×3 rotation about z', A: 'cos(theta) -sin(theta) 0\nsin(theta) cos(theta) 0\n0 0 1', B: '1 0 0\n0 1 0\n0 0 1' },
@@ -681,7 +776,7 @@ function syntaxHelp() {
     ['Other', 'sqrt(x)  exp(x)  ln(x)  abs(x)'],
     ['Constants', 'pi (or π)   i (imaginary unit)'],
   ];
-  return el('details', { class: 'help' }, el('summary', {}, 'What can I type in a cell?'),
+  return el('div', { class: 'help' },
     el('table', { class: 'helptable' }, rows.map(([k, v]) => el('tr', {}, el('td', {}, k), el('td', { class: 'math' }, v)))),
     el('p', { class: 'note' }, 'Identities are applied automatically: sin²+cos² collapses to 1, √(u)² to u, i² to −1, and tan is kept as sin/cos internally. Exact values are known for multiples of π/6 and π/4.'));
 }
@@ -714,6 +809,10 @@ function init() {
   });
   $('#assign').addEventListener('input', () => { try { readAssignments(); } catch { /* shown inline */ } });
   $('#clear-results').addEventListener('click', () => { results.innerHTML = ''; });
+  const toggle = $('#side-toggle');
+  const setSide = (open) => { document.body.classList.toggle('side-collapsed', !open); toggle.setAttribute('aria-expanded', String(open)); };
+  setSide(window.innerWidth > 900);
+  toggle.addEventListener('click', () => setSide(document.body.classList.contains('side-collapsed')));
   $('#settings-extra').append(syntaxHelp());
 
   const exSel = $('#examples');

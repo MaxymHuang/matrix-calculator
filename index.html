@@ -8,9 +8,50 @@
 </head>
 <body>
 <header>
-  <h1>Matrix Calculator</h1>
+  <div class="title-row">
+    <h1>Matrix Calculator</h1>
+    <button id="side-toggle" class="ghost-light" aria-controls="sidebar" aria-expanded="true">☰ Settings</button>
+  </div>
   <p class="sub">Exact arithmetic for any dimension — numbers, symbols and trigonometry. Enter <code>-3/4</code>, <code>x</code>, <code>alpha</code>, <code>sin(theta)</code>, <code>sqrt(2)</code>.</p>
 </header>
+
+<div class="layout">
+<aside class="sidebar" id="sidebar" aria-label="Settings">
+  <details class="side-section" open>
+    <summary>Examples</summary>
+    <div class="side-body">
+      <select id="examples"><option value="">— load an example —</option></select>
+      <p class="note">Loads a matrix pair into A and B.</p>
+    </div>
+  </details>
+  <details class="side-section" open>
+    <summary>Variables</summary>
+    <div class="side-body">
+      <input id="assign" type="text" spellcheck="false" placeholder="x = 2, theta = pi/4" aria-label="Variable values">
+      <span id="assign-note" class="note"></span>
+      <p class="note">Gives symbols values for ≈ numeric results and the Substitute button.</p>
+    </div>
+  </details>
+  <details class="side-section">
+    <summary>Display</summary>
+    <div class="side-body">
+      <label>Show numbers as
+        <select id="num-mode">
+          <option value="frac">exact fractions</option>
+          <option value="dec">decimals</option>
+        </select>
+      </label>
+      <label>Decimal places <input id="precision" type="number" min="0" max="12" value="4"></label>
+    </div>
+  </details>
+  <details class="side-section">
+    <summary>Syntax help</summary>
+    <div class="side-body" id="settings-extra"></div>
+  </details>
+  <div class="side-actions">
+    <button id="clear-results" class="ghost">Clear results</button>
+  </div>
+</aside>
 
 <main>
   <section class="inputs">
@@ -67,30 +108,17 @@
         <button data-op="eigen">Eigenvalues &amp; eigenvectors</button>
         <button data-op="diag">Diagonalize</button>
       </div>
+      <div class="sublabel">Size &amp; orthogonality</div>
+      <div class="btns">
+        <button data-op="norm" title="Vector: 2-, 1- and ∞-norms and the unit vector. Matrix: Frobenius, 1-, ∞- and spectral norms">Norm</button>
+        <button data-op="gramschmidt" title="Orthonormalize the columns, with the QR factorization">Gram–Schmidt (QR)</button>
+      </div>
     </div>
-  </section>
-
-  <section class="toolbar">
-    <label>Show numbers as
-      <select id="num-mode">
-        <option value="frac">exact fractions</option>
-        <option value="dec">decimals</option>
-      </select>
-    </label>
-    <label>Decimal places <input id="precision" type="number" min="0" max="12" value="4"></label>
-    <label>Examples
-      <select id="examples"><option value="">— load an example —</option></select>
-    </label>
-    <label class="wide">Variables
-      <input id="assign" type="text" spellcheck="false" placeholder="x = 2, theta = pi/4">
-    </label>
-    <button id="clear-results" class="ghost">Clear results</button>
-    <span id="assign-note" class="note"></span>
-    <span id="settings-extra"></span>
   </section>
 
   <section id="results"></section>
 </main>
+</div>
 
 <script src="fraction.js"></script>
 <script src="symbolic.js"></script>
