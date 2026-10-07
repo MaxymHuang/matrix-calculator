@@ -20,50 +20,73 @@
 
   <section class="ops">
     <div class="op-group">
-      <h3>Two-matrix operations</h3>
+      <h3>Matrix arithmetic <span class="hint">uses A and B</span></h3>
       <div class="btns">
         <button data-op="mul">A × B</button>
         <button data-op="mulBA">B × A</button>
         <button data-op="add">A + B</button>
         <button data-op="sub">A − B</button>
-        <button data-op="dot" title="A and B must be vectors (1×n or n×1)">A · B &nbsp;(dot)</button>
-        <button data-op="cross" title="A and B must be 3-component vectors">A ⨯ B &nbsp;(cross)</button>
       </div>
     </div>
+
     <div class="op-group">
-      <h3>Single-matrix operations on
+      <h3>Vectors <span class="hint">A and B as 1×n or n×1</span></h3>
+      <div class="sublabel">Products</div>
+      <div class="btns">
+        <button data-op="dot" title="A and B must be vectors (1×n or n×1)">Dot product</button>
+        <button data-op="cross" title="A and B must be 3-component vectors">Cross product</button>
+      </div>
+      <div class="sublabel">Project
+        <span class="seg" id="proj-seg">
+          <button class="active" data-proj="AB" title="Project vector A onto B">A onto B</button><button data-proj="BA" title="Project vector B onto A">B onto A</button>
+        </span>
+      </div>
+      <div class="btns">
+        <button data-op="projVec" title="Both must be vectors (1×n or n×1)">onto a vector</button>
+        <button data-op="projSpace" title="The vector is projected onto the column space of the other matrix">onto a vector space</button>
+        <button data-op="projMatrix" title="Projection matrix onto the column space of the second matrix">Projection matrix</button>
+      </div>
+    </div>
+
+    <div class="op-group">
+      <h3>Analyze one matrix
         <span class="seg" id="target-seg">
           <button class="active" data-target="A">A</button><button data-target="B">B</button>
         </span>
       </h3>
+      <div class="sublabel">Reduce &amp; invert</div>
       <div class="btns">
         <button data-op="transpose">Transpose</button>
         <button data-op="rref">RREF</button>
         <button data-op="det">Determinant</button>
-        <button data-op="inverse">Inverse (Gauss–Jordan)</button>
-        <button data-op="eigen">Eigenvalues &amp; eigenvectors</button>
+        <button data-op="inverse">Inverse</button>
+      </div>
+      <div class="sublabel">Structure</div>
+      <div class="btns">
         <button data-op="subspaces">Four fundamental subspaces</button>
+        <button data-op="eigen">Eigenvalues &amp; eigenvectors</button>
         <button data-op="diag">Diagonalize</button>
       </div>
     </div>
-    <div class="op-group settings">
-      <label>Show numbers as
-        <select id="num-mode">
-          <option value="frac">exact fractions</option>
-          <option value="dec">decimals</option>
-        </select>
-      </label>
-      <label>Decimal places <input id="precision" type="number" min="0" max="12" value="4"></label>
-      <label>Examples
-        <select id="examples"><option value="">— load an example —</option></select>
-      </label>
-      <button id="clear-results" class="ghost">Clear results</button>
-      <label class="wide">Variables
-        <input id="assign" type="text" spellcheck="false" placeholder="x = 2, theta = pi/4">
-      </label>
-      <span id="assign-note" class="note"></span>
-      <span id="settings-extra"></span>
-    </div>
+  </section>
+
+  <section class="toolbar">
+    <label>Show numbers as
+      <select id="num-mode">
+        <option value="frac">exact fractions</option>
+        <option value="dec">decimals</option>
+      </select>
+    </label>
+    <label>Decimal places <input id="precision" type="number" min="0" max="12" value="4"></label>
+    <label>Examples
+      <select id="examples"><option value="">— load an example —</option></select>
+    </label>
+    <label class="wide">Variables
+      <input id="assign" type="text" spellcheck="false" placeholder="x = 2, theta = pi/4">
+    </label>
+    <button id="clear-results" class="ghost">Clear results</button>
+    <span id="assign-note" class="note"></span>
+    <span id="settings-extra"></span>
   </section>
 
   <section id="results"></section>

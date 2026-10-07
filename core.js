@@ -468,6 +468,86 @@ function cross(u, v) {
 }
 function norm(u) { return sqrtExpr(dot(u, u)); }
 
+/* ------------------------------------------------------------ projections */
+// Projections use the real dot product, so complex entries are rejected rather
+// than silently given a bilinear (non-Hermitian) "inner product".
+function assertReal(items, what) {
+  for (const x of items) {
+    const p = x.splitImag();
+    if (!p || !p[1].isZero()) throw new Error(`Projection is defined for real ${what}; this one contains the imaginary unit i`);
+  }
+}
+function addAssumption(list, e) {
+  if (e.constVal() === null && !list.some((a) => a.eq(e))) list.push(e);
+}
+
+// proj_v(u) = (u·v / v·v) v
+function projectOntoVector(u, v) {
+  if (u.length !== v.length) throw new Error(`Cannot project a ${u.length}-component vector onto a ${v.length}-component vector (lengths must match)`);
+  assertReal(u, 'vectors'); assertReal(v, 'vectors');
+  const vv = dot(v, v);
+  if (vv.isZero()) throw new Error('Cannot project onto the zero vector — it spans no line');
+  const uv = dot(u, v);
+  const coef = uv.div(vv);
+  const proj = v.map((x) => x.mul(coef));
+  const perp = u.map((x, i) => x.sub(proj[i]));
+  const assumptions = [];
+  addAssumption(assumptions, vv);
+  return { u, v, uv, vv, coef, proj, perp, assumptions,
+    comp: uv.div(norm(v)),            // signed length of the shadow of u along v
+    check: dot(perp, v) };            // 0 when perp ⟂ v
+}
+
+// Orthogonal projection of b onto the column space of M (any spanning set — dependent columns are fine).
+// x̂ solves the normal equations (BᵀB) x̂ = Bᵀ b for B = an independent subset of the columns.
+function projectOntoColumnSpace(M, b) {
+  const [m, n] = dims(M);
+  if (m !== b.length) throw new Error(`The vector has ${b.length} components but the subspace lives in ℝ${m} (columns of the matrix have ${m} entries)`);
+  assertReal(b, 'vectors');
+  for (const r of M) assertReal(r, 'matrices');
+  const red = rref(M, { steps: true });
+  const assumptions = red.assumptions.slice();
+  const basisCols = red.pivots;
+  const k = basisCols.length;
+  const bcol = b.map((x) => [x]);
+  if (k === 0) {
+    const zero = b.map(() => Expr.ZERO);
+    return { m, n, k, pivots: basisCols, basis: [], G: null, Mtb: null, xhat: null, proj: zero, perp: b.slice(),
+      P: zeros(m, m), assumptions, inSpace: b.every((x) => x.isZero()), residualCheck: null,
+      R: red.R, rrefSteps: red.steps };
+  }
+  const B = M.map((row) => basisCols.map((c) => row[c]));
+  const Bt = transpose(B);
+  const G = mul(Bt, B);
+  const Mtb = mul(Bt, bcol);
+  const inv = inverse(G);
+  if (inv.singular) throw new Error('The Gram matrix BᵀB is singular, so this projection cannot be computed exactly (the columns are only generically independent)');
+  for (const a of inv.assumptions) addAssumption(assumptions, a);
+  const xhat = mul(inv.inverse, Mtb).map((r) => r[0]);
+  const BGinv = mul(B, inv.inverse);
+  const P = mul(BGinv, Bt);
+  const proj = mul(B, xhat.map((x) => [x])).map((r) => r[0]);
+  const perp = b.map((x, i) => x.sub(proj[i]));
+  const resid = mul(Bt, perp.map((x) => [x])).map((r) => r[0]);   // Bᵀ(b − p) = 0
+  return { m, n, k, pivots: basisCols, basis: basisCols.map((c) => M.map((row) => row[c])),
+    B, Bt, G, Ginv: inv, BGinv, R: red.R, rrefSteps: red.steps,
+    Mtb: Mtb.map((r) => r[0]), xhat, proj, perp, P, assumptions,
+    inSpace: perp.every((x) => x.isZero()), residualCheck: resid };
+}
+
+// Projection matrix onto the column space of M: P = B (BᵀB)⁻¹ Bᵀ
+function projectionMatrix(M) {
+  const [m] = dims(M);
+  const r = projectOntoColumnSpace(M, Array.from({ length: m }, () => Expr.ZERO));
+  const P = r.P;
+  const I = identity(m);
+  return { P, k: r.k, m, pivots: r.pivots, basis: r.basis, assumptions: r.assumptions,
+    R: r.R, rrefSteps: r.rrefSteps, B: r.B, Bt: r.Bt, G: r.G, Ginv: r.Ginv, BGinv: r.BGinv,
+    idempotent: mul(P, P).every((row, i) => row.every((x, j) => x.eq(P[i][j]))),
+    symmetric: P.every((row, i) => row.every((x, j) => x.eq(P[j][i]))),
+    complement: sub(I, P), trace: trace(P) };
+}
+
 const api = {
   Expr, E, display, sqrtExpr, Frac, F, C, isqrt, simplifySqrt,
   dims, zeros, identity, clone, transpose, add, sub, mul, scaleMat, trace, parseMatrix, augment,
@@ -475,6 +555,7 @@ const api = {
   rref, det, detCofactor, inverse, nullspace, fourSubspaces, charPoly, rootsNumeric,
   crref, complexNullspace, complexInverse, eigen, diagonalize, approxOf, quadraticRoots,
   asVector, dot, cross, norm,
+  projectOntoVector, projectOntoColumnSpace, projectionMatrix,
 };
 if (isNode) module.exports = api;
 else root.MatrixCore = api;

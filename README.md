@@ -23,6 +23,11 @@ A = [ cos θ  −sin θ ]        det A = 1          λ = cos θ ± i·sin θ
 | **Gauss–Jordan inverse** | Shows `[A │ I] → [I │ A⁻¹]` with every row operation. Singular matrices identified. |
 | **Determinant** | Row reduction (with the triangular form, swap count and diagonal product) for numbers; division-free cofactor expansion for symbolic matrices, so the answer stays a clean polynomial. |
 | **Dot & cross product** | Norms, the angle between vectors, orthogonality check, and the parallelogram area. |
+| **Projection onto a vector** | `proj_v u = (u·v)/(v·v) · v`, with the coefficient, signed scalar component, orthogonal remainder, and a check that the remainder is ⟂ `v`. |
+| **Projection onto a vector space** | Projects a vector onto the column space of a matrix (dependent columns are fine — a pivot basis `B` is extracted). Solves the normal equations `(BᵀB)x̂ = Bᵀb`, shows `p = Bx̂`, the error `e = b − p`, the distance `‖e‖`, and the projection matrix `P = B(BᵀB)⁻¹Bᵀ`. |
+| **Projection matrix** | `P` for the column space of a matrix, with `P² = P`, `Pᵀ = P`, rank = trace checks and the complement `I − P`. |
+
+Pick the direction with the **Projection** selector (*A onto B* or *B onto A*): the first matrix is the vector being projected, the second is the vector or matrix it is projected onto. Projections are over real vectors; entries containing `i` are rejected. With symbolic entries the divisor (`v·v`, Gram-matrix pivots) is reported under **Assumes**.
 
 ## Symbolic algebra
 
@@ -92,7 +97,7 @@ Matrices up to 12×12 are supported through the UI.
 |---|---|
 | `fraction.js` | Exact rationals on BigInt, plus integer-root helpers. |
 | `symbolic.js` | The computer-algebra layer: atoms, polynomials, canonical rewrites, simplification, parser, printer, numeric evaluation. |
-| `core.js` | Linear algebra over expressions — RREF, determinant, inverse, subspaces, characteristic polynomial, eigen decomposition, diagonalization. |
+| `core.js` | Linear algebra over expressions — RREF, determinant, inverse, subspaces, characteristic polynomial, eigen decomposition, diagonalization, vector products, projections. |
 | `app.js` | UI: input grids, result rendering, formatting, examples. |
 | `index.html`, `style.css` | Page and styling. |
 
@@ -107,6 +112,9 @@ K.inverse(A).inverse;                       // the transpose, exactly
 K.eigen(A).eigenvalues.map(v => K.display(v.value));
                                             // ["cos(t) + i·sin(t)", "cos(t) − i·sin(t)"]
 K.fourSubspaces(A);                         // column/row/null/left-null bases
+const v = (...s) => s.map(K.Expr.parse);
+K.projectOntoVector(v('1','2','3'), v('4','5','6')).proj;               // (128/77, 160/77, 192/77)
+K.projectOntoColumnSpace(K.parseMatrix([['1','0'],['1','1'],['1','2']]), v('6','0','0')).xhat;  // (5, −3)
 K.display(K.det(K.parseMatrix([['1','1','1'],['x','y','z'],['x^2','y^2','z^2']])).value);
                                             // the Vandermonde determinant
 ```

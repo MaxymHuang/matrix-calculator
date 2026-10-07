@@ -11,6 +11,7 @@ const state = {
   A: { rows: 3, cols: 3, cells: [] },
   B: { rows: 3, cols: 3, cells: [] },
   target: 'A',
+  proj: 'AB',        // 'AB': project the vector A onto B · 'BA': the reverse
   mode: 'frac',
   precision: 4,
   assignSrc: '',
@@ -139,6 +140,50 @@ function assumptionNote(list) {
   const parts = list.map((e) => `${fmtCell(e)} ≠ 0`);
   return el('p', { class: 'note assume' }, el('span', { class: 'label' }, 'Assumes:'),
     parts.join('  and  '), ' — a pivot was taken to be nonzero, so the result is the generic case.');
+}
+
+// projection needs a divisor (v·v, a Gram pivot …) that symbolic input could make vanish
+function nonzeroNote(list, what) {
+  if (!list || !list.length) return null;
+  return el('p', { class: 'note assume' }, el('span', { class: 'label' }, 'Assumes:'),
+    list.map((e) => `${fmtCell(e)} ≠ 0`).join('  and  '), ` — ${what} must be nonzero for the formula to apply; otherwise the result is the generic case.`);
+}
+// a 1×n "vector" has a one-dimensional column space, which is rarely what was meant
+function singleRowNote(M, name) {
+  if (M.length !== 1 || M[0].length < 2) return null;
+  return el('p', { class: 'note assume' }, el('span', { class: 'label' }, 'Note:'),
+    `${name} is a single row, so its column space is ℝ¹. To project onto the line spanned by it, enter it as an n×1 column (or use “onto a vector”).`);
+}
+
+// the construction P = B (BᵀB)⁻¹ Bᵀ, one stage at a time
+function projectionSteps(r, M, name) {
+  if (r.k === 0) return el('p', { class: 'note' }, `${name} has no nonzero column, so there are no steps: P is the zero matrix.`);
+  const k = r.k;
+  const stage = (n, title, hint, ...body) => el('div', { class: 'subspace' },
+    el('h3', {}, `Step ${n}: ${title}`), hint ? el('p', { class: 'note' }, hint) : null, ...body);
+  const inv = r.Ginv;
+  return el('div', { class: 'projsteps' },
+    stage(1, 'find an independent set of columns',
+      `Row-reduce ${name}; the pivot columns (${r.pivots.map((c) => c + 1).join(', ')}) of the original matrix are linearly independent and span the same space.`,
+      row(matrixEl(M, { caption: name }), opSym('→'), matrixEl(r.R, { caption: `rref(${name})`, pivots: pivotCells(r.pivots) })),
+      stepsDetails(r.rrefSteps)),
+    stage(2, 'collect them into B',
+      `B holds columns ${r.pivots.map((c) => c + 1).join(', ')} of ${name}, so its columns are a basis of the space (${r.m}×${k}).`,
+      row(matrixEl(r.B, { caption: 'B' }), opSym('→ transpose →'), matrixEl(r.Bt, { caption: 'Bᵀ' }))),
+    stage(3, 'form the Gram matrix  BᵀB',
+      `Every entry is a dot product of two basis vectors (${k}×${k}).`,
+      row(matrixEl(r.Bt, { caption: 'Bᵀ' }), opSym('×'), matrixEl(r.B, { caption: 'B' }), opSym('='), matrixEl(r.G, { caption: 'BᵀB' }))),
+    stage(4, 'invert it with Gauss–Jordan',
+      'Row-reduce [BᵀB | I] to [I | (BᵀB)⁻¹].',
+      row(matrixEl(inv.augmented, { aug: k, caption: '[BᵀB | I]' }), opSym('→'), matrixEl(inv.reduced, { aug: k, caption: '[I | (BᵀB)⁻¹]' })),
+      row(el('span', { class: 'label' }, '(BᵀB)⁻¹ ='), matrixEl(inv.inverse)),
+      stepsDetails(inv.steps, { aug: k })),
+    stage(5, 'multiply  B (BᵀB)⁻¹',
+      null,
+      row(matrixEl(r.B, { caption: 'B' }), opSym('×'), matrixEl(inv.inverse, { caption: '(BᵀB)⁻¹' }), opSym('='), matrixEl(r.BGinv, { caption: 'B (BᵀB)⁻¹' }))),
+    stage(6, 'multiply by Bᵀ to get P',
+      null,
+      row(matrixEl(r.BGinv, { caption: 'B (BᵀB)⁻¹' }), opSym('×'), matrixEl(r.Bt, { caption: 'Bᵀ' }), opSym('='), matrixEl(r.P, { caption: 'P', sendable: true }))));
 }
 
 /* ------------------------------------------------------------ input grids */
@@ -347,6 +392,85 @@ const ops = {
       el('p', { class: 'note' }, el('span', { class: 'label' }, '‖u ⨯ v‖ ='), el('span', { class: 'math' }, fmtCell(K.norm(w))),
         ' (area of the parallelogram spanned by u and v)'));
   },
+  projVec() {
+    const [src, dst] = state.proj;
+    const u = K.asVector(readMatrix(src)), v = K.asVector(readMatrix(dst));
+    const r = K.projectOntoVector(u, v);
+    const terms = (a, b) => a.map((x, i) => `(${fmtCell(x)})(${fmtCell(b[i])})`).join(' + ');
+    // with symbols the simplified quotient is a mess, so keep it as (u·v)/‖v‖
+    const compStr = r.vv.constVal() !== null ? fmtCell(r.comp) : `(${fmtCell(r.uv)}) / (${fmtCell(K.norm(v))})`;
+    card(`Projection of ${src} onto ${dst}  (vector onto vector)`,
+      row(colVec(u, { caption: `u = ${src}` }), opSym('onto'), colVec(v, { caption: `v = ${dst}` }), opSym('='),
+        colVec(r.proj, { caption: 'proj_v u', sendable: true })),
+      el('p', { class: 'math note' }, 'proj_v u = (u · v) / (v · v) · v'),
+      el('p', { class: 'math note' }, `u · v = ${terms(u, v)} = ${fmtCell(r.uv)}`),
+      el('p', { class: 'math note' }, `v · v = ${terms(v, v)} = ${fmtCell(r.vv)}`),
+      el('p', {}, el('span', { class: 'label' }, 'Coefficient:'), el('span', { class: 'math' }, `(u · v)/(v · v) = ${fmtCell(r.coef)}`),
+        approxNote(r.coef) ? el('span', { class: 'note approx' }, ' ' + approxNote(r.coef)) : null),
+      el('p', {}, el('span', { class: 'label' }, 'Scalar component:'), el('span', { class: 'math' }, `comp_v u = (u · v)/‖v‖ = ${compStr}`),
+        approxNote(r.comp) ? el('span', { class: 'note approx' }, ' ' + approxNote(r.comp)) : null,
+        el('span', { class: 'note' }, '  (signed length of the shadow of u along v)')),
+      row(el('span', { class: 'label' }, 'Orthogonal part  u − proj_v u ='), colVec(r.perp, { caption: 'u⊥', sendable: true })),
+      el('p', { class: 'note' }, r.check.isZero()
+        ? 'Check: (u − proj_v u) · v = 0  ✓  — the remainder is perpendicular to v, so u = proj_v u + u⊥ is the orthogonal decomposition.'
+        : `Check: (u − proj_v u) · v = ${fmtCell(r.check)}`),
+      nonzeroNote(r.assumptions, 'v · v'));
+  },
+  projSpace() {
+    const [src, dst] = state.proj;
+    const b = K.asVector(readMatrix(src));
+    const M = readMatrix(dst);
+    const r = K.projectOntoColumnSpace(M, b);
+    const kids = [
+      row(colVec(b, { caption: `b = ${src}` }), opSym('onto C(' + dst + ')'), matrixEl(M, { caption: `${dst}  (${r.m}×${r.n})` }), opSym('='),
+        colVec(r.proj, { caption: 'p = proj b', sendable: true })),
+      singleRowNote(M, dst),
+      el('p', { class: 'note' }, `The vector space is the column space of ${dst}: the span of its columns, of dimension ${r.k}. ` +
+        'The projection p is the point of that space closest to b, found from the normal equations (BᵀB) x̂ = Bᵀb, with B a basis of independent columns; then p = B x̂.'),
+    ];
+    if (r.k === 0) {
+      kids.push(el('p', {}, el('span', { class: 'badge warn' }, 'zero subspace'), ` ${dst} has no nonzero column, so the space is { 0 } and the projection is the zero vector.`));
+      card(`Projection of ${src} onto the column space of ${dst}`, ...kids);
+      return;
+    }
+    kids.push(el('div', { class: 'subspace' },
+      el('h3', {}, 'Basis B ', el('span', { class: 'note' }, `— pivot columns ${r.pivots.map((c) => c + 1).join(', ')} of ${dst}`)),
+      row(matrixEl(r.B, { caption: 'B', sendable: true }))));
+    kids.push(el('div', { class: 'subspace' },
+      el('h3', {}, 'Normal equations'),
+      row(matrixEl(r.G, { caption: 'BᵀB' }), opSym('· x̂ ='), colVec(r.Mtb, { caption: 'Bᵀb' }),
+        opSym('⟹'), colVec(r.xhat, { caption: 'x̂ = (BᵀB)⁻¹ Bᵀb' }))));
+    kids.push(row(el('span', { class: 'label' }, 'p = B x̂ ='), colVec(r.proj, { caption: 'p', sendable: true }),
+      el('span', { class: 'label', style: 'margin-left:16px' }, 'e = b − p ='), colVec(r.perp, { caption: 'e (⟂ to the space)', sendable: true })));
+    if (r.inSpace) {
+      kids.push(el('p', {}, el('span', { class: 'badge ok' }, 'b is in the space'), ' b already lies in the column space, so p = b and the error e is 0.'));
+    } else {
+      kids.push(el('p', { class: 'note' }, el('span', { class: 'label' }, 'Distance from b to the space:'), el('span', { class: 'math' }, `‖e‖ = ${fmtCell(K.norm(r.perp))}`),
+        approxNote(K.norm(r.perp)) ? el('span', { class: 'note approx' }, ' ' + approxNote(K.norm(r.perp))) : null));
+    }
+    kids.push(el('p', { class: 'note' }, r.residualCheck.every((x) => x.isZero())
+      ? 'Check: Bᵀ e = 0  ✓  — the error is orthogonal to every basis vector, hence to the whole space.'
+      : `Check: Bᵀ e = (${r.residualCheck.map(fmtCell).join(', ')})`));
+    kids.push(el('details', {}, el('summary', {}, 'Projection matrix  P = B (BᵀB)⁻¹ Bᵀ   (p = P b) — show the steps'),
+      projectionSteps(r, M, dst)));
+    kids.push(nonzeroNote(r.assumptions, 'these pivots and Gram-matrix pivots'));
+    card(`Projection of ${src} onto the column space of ${dst}`, ...kids);
+  },
+  projMatrix() {
+    const dst = state.proj[1];
+    const M = readMatrix(dst);
+    const r = K.projectionMatrix(M);
+    const I = K.identity(r.m);
+    const ok = (b) => (b ? '✓' : '✗');
+    card(`Projection matrix onto the column space of ${dst}`,
+      row(matrixEl(M, { caption: `${dst}  (${r.m}×${M[0].length})` }), opSym('→'), matrixEl(r.P, { caption: `P = B (BᵀB)⁻¹ Bᵀ`, sendable: true })),
+      singleRowNote(M, dst),
+      el('p', { class: 'note' }, `B is the independent (pivot) columns of ${dst}: ${r.pivots.length ? r.pivots.map((c) => c + 1).join(', ') : 'none'}. P b is the projection of any b ∈ ℝ${sup(r.m)} onto the space, which has dimension ${r.k}.`),
+      el('p', { class: 'note' }, `P² = P  ${ok(r.idempotent)}   Pᵀ = P  ${ok(r.symmetric)}   rank P = trace P = ${fmtCell(r.trace)}`),
+      row(el('span', { class: 'label' }, 'I − P  (projects onto the orthogonal complement):'), matrixEl(r.complement, { caption: 'I − P', sendable: true })),
+      el('details', { open: '' }, el('summary', {}, 'Show the steps'), projectionSteps(r, M, dst)),
+      nonzeroNote(r.assumptions, 'these pivots and Gram-matrix pivots'));
+  },
   transpose() { const T = state.target, A = readMatrix(T);
     card(`${T}ᵀ`, row(matrixEl(A, { caption: T }), opSym('→'), matrixEl(K.transpose(A), { caption: `${T}ᵀ`, sendable: true }))); },
 
@@ -510,6 +634,11 @@ const EXAMPLES = [
   { g: 'Numeric', name: 'Jordan block (not diagonalizable)', A: '2 1 0\n0 2 0\n0 0 3', B: '1 0 0\n0 1 0\n0 0 1' },
   { g: 'Numeric', name: 'Product 2×3 · 3×2', A: '1 2 3\n4 5 6', B: '7 8\n9 10\n11 12' },
   { g: 'Numeric', name: 'Vectors in ℝ³ (dot / cross)', A: '1\n2\n3', B: '4\n5\n6' },
+  { g: 'Numeric', name: 'Projection: vector onto vector (A onto B)', A: '1\n2\n3', B: '4\n5\n6' },
+  { g: 'Numeric', name: 'Projection: vector onto a plane (A onto col space of B)', A: '6\n0\n0', B: '1 0\n1 1\n1 2' },
+  { g: 'Numeric', name: 'Projection: dependent spanning columns', A: '3\n4\n5', B: '1 0 1\n0 1 1\n0 0 0' },
+  { g: 'Symbolic', name: 'Projection: vector onto vector with symbols', A: 'x\ny', B: 'a\nb' },
+  { g: 'Symbolic', name: 'Projection: unit vector direction (θ)', A: 'x\ny', B: 'cos(theta)\nsin(theta)' },
   { g: 'Symbolic', name: 'General 2×2 [[a,b],[c,d]] — det & inverse', A: 'a b\nc d', B: '1 0\n0 1' },
   { g: 'Symbolic', name: '2×2 rotation R(θ) — det, inverse, eigen', A: 'cos(theta) -sin(theta)\nsin(theta) cos(theta)', B: 'cos(phi) -sin(phi)\nsin(phi) cos(phi)' },
   { g: 'Symbolic', name: '3×3 rotation about z', A: 'cos(theta) -sin(theta) 0\nsin(theta) cos(theta) 0\n0 0 1', B: '1 0 0\n0 1 0\n0 0 1' },
@@ -572,6 +701,11 @@ function init() {
     const b = ev.target.closest('button'); if (!b) return;
     state.target = b.dataset.target;
     $('#target-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+  });
+  $('#proj-seg').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (!b) return;
+    state.proj = b.dataset.proj;
+    $('#proj-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
   });
   $('#num-mode').addEventListener('change', (ev) => { state.mode = ev.target.value; });
   $('#precision').addEventListener('change', (ev) => {
