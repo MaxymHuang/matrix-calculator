@@ -1,8 +1,8 @@
 # Matrix Calculator
 
-A dependency-free web matrix calculator for matrices of **any dimension**, with **exact arithmetic** — over rational numbers *and* over symbols. Entries can be numbers (`-3/4`), symbols (`x`, `alpha`, `theta`), or expressions (`sin(theta)`, `sqrt(2)`, `x^2 - 1`), and every operation works the same way on all of them.
+A web matrix calculator with no build step for matrices of **any dimension**, with **exact arithmetic** — over rational numbers *and* over symbols. Entries can be numbers (`-3/4`), symbols (`x`, `alpha`, `theta`), or expressions (`sin(theta)`, `sqrt(2)`, `x^2 - 1`), and every operation works the same way on all of them.
 
-Open `index.html` in any browser. No build step, no install, no server.
+Open `index.html` in any browser. No build step, no install, no server — the one third-party piece, [KaTeX](https://katex.org) for typesetting, is vendored in `vendor/katex/`, so it works offline.
 
 **Live:** https://maxymhuang.github.io/matrix-calculator/
 
@@ -97,13 +97,16 @@ Matrices up to 12×12 are supported through the UI.
 
 | File | Purpose |
 |---|---|
+| `vendor/katex/` | KaTeX 0.16 (MIT) — the math typesetter: script, stylesheet and fonts, shipped with the project. |
 | `fraction.js` | Exact rationals on BigInt, plus integer-root helpers. |
 | `symbolic.js` | The computer-algebra layer: atoms, polynomials, canonical rewrites, simplification, parser, printer, numeric evaluation. |
 | `core.js` | Linear algebra over expressions — RREF, determinant, inverse, subspaces, characteristic polynomial, eigen decomposition, diagonalization, vector products, projections. |
 | `app.js` | UI: input grids, result rendering, formatting, examples. |
 | `index.html`, `style.css` | Page and styling. |
 
-Everything runs in Node too:
+`symbolic.js` also prints every expression as LaTeX (`toTeX`) — stacked fractions, radicals, real exponents, Greek letters — which `app.js` hands to KaTeX. Results, matrices, formulas and captions are all typeset; if KaTeX fails to load, the page falls back to unformatted text.
+
+Everything except the typesetting runs in Node too:
 
 ```js
 const K = require('./core.js');

@@ -477,6 +477,14 @@ function assertReal(items, what) {
     if (!p || !p[1].isZero()) throw new Error(`Projection is defined for real ${what}; this one contains the imaginary unit i`);
   }
 }
+// Orthogonalising or projecting 3+ symbolic columns that share 3+ symbols makes the expressions explode
+// (Gram matrices of polynomials, then square roots of them), so refuse instead of freezing the page.
+function assertTractable(M, what) {
+  const [, n] = dims(M);
+  if (n >= 3 && matrixVars(M).length >= 3) {
+    throw new Error(`${what} of 3 or more columns that involve 3 or more different symbols is too large to compute symbolically — give some symbols values in the Variables box and press Substitute`);
+  }
+}
 function addAssumption(list, e) {
   if (e.constVal() === null && !list.some((a) => a.eq(e))) list.push(e);
 }
@@ -505,6 +513,7 @@ function projectOntoColumnSpace(M, b) {
   if (m !== b.length) throw new Error(`The vector has ${b.length} components but the subspace lives in ℝ${m} (columns of the matrix have ${m} entries)`);
   assertReal(b, 'vectors');
   for (const r of M) assertReal(r, 'matrices');
+  assertTractable(M, 'A projection onto the span');
   const red = rref(M, { steps: true });
   const assumptions = red.assumptions.slice();
   const basisCols = red.pivots;
@@ -599,6 +608,7 @@ function matrixNorms(M, env = {}) {
 function gramSchmidt(M) {
   const [m, n] = dims(M);
   for (const r of M) assertReal(r, 'matrices');
+  assertTractable(M, 'Gram–Schmidt');
   const cols = transpose(M);
   const ortho = [], dots = [], used = [], dependent = [], steps = [], assumptions = [];
   cols.forEach((a, j) => {

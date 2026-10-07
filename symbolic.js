@@ -828,6 +828,101 @@ function display(e, opts = {}) {
   return `${nStr}/${dStr}`;
 }
 
+/* ---------------------------------------------------------------- LaTeX */
+// The same expressions as display(), typeset as LaTeX: stacked fractions, radicals, real exponents.
+const TEX_GREEK = { epsilon: 'varepsilon', phi: 'varphi' };
+function texName(name) {
+  if (GREEK[name]) return '\\' + (TEX_GREEK[name] || name);
+  let m = /^([A-Za-z])_?(\d+)$/.exec(name);
+  if (m) return m[1] + '_{' + m[2] + '}';
+  m = /^([A-Za-z]+)_(\w+)$/.exec(name);
+  if (m) return (m[1].length > 1 ? '\\mathit{' + m[1] + '}' : m[1]) + '_{' + m[2] + '}';
+  return name.length > 1 ? '\\mathit{' + name + '}' : name;
+}
+function texNum(c, o) {   // c is a nonnegative Frac
+  if (o.mode === 'dec') {
+    let x = c.toNumber();
+    const pr = o.precision;
+    if (Math.abs(x) < 0.5 * 10 ** -pr) x = 0;
+    return Number.isInteger(x) ? String(x) : x.toFixed(pr).replace(/0+$/, '').replace(/\.$/, '');
+  }
+  return c.isInteger() ? String(c.n) : '\\frac{' + c.n + '}{' + c.d + '}';
+}
+const TEX_FN = { sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sec: '\\sec', csc: '\\csc',
+  sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh', ln: '\\ln', asin: '\\arcsin', acos: '\\arccos', atan: '\\arctan' };
+function texAtomPow(key, k, o) {
+  const a = atomOf(key);
+  const pw = k === 1 ? '' : '^{' + k + '}';
+  if (!a) return key + pw;
+  if (a.kind === 'var') return texName(a.name) + pw;
+  if (a.kind === 'const') return (a.name === 'pi' ? '\\pi' : a.name) + pw;
+  if (a.kind === 'imag') return 'i' + pw;
+  const arg = toTeX(a.arg, o);
+  if (TEX_FN[a.fn]) {   // \left( adds a gap after the name, so only use stretchy brackets for tall arguments
+    const tall = /\\frac|\\sqrt|\\left|\^\{/.test(arg);
+    return TEX_FN[a.fn] + pw + (tall ? '\\left(' + arg + '\\right)' : '(' + arg + ')');
+  }
+  const base = a.fn === 'sqrt' ? '\\sqrt{' + arg + '}'
+    : a.fn === 'abs' ? '\\left|' + arg + '\\right|'
+    : a.fn === 'exp' ? 'e^{' + arg + '}'
+    : '\\operatorname{' + a.fn + '}\\left(' + arg + '\\right)';
+  return k === 1 ? base : '\\left(' + base + '\\right)' + pw;
+}
+function texTerm(t, o) {   // a term without its sign
+  const keys = Object.keys(t.m).sort((x, y) => {
+    const ax = atomOf(x), ay = atomOf(y);
+    const rank = (a) => (!a ? 3 : a.kind === 'var' ? 0 : a.kind === 'const' ? 1 : a.kind === 'imag' ? 2 : 4);
+    return rank(ax) - rank(ay) || (x < y ? -1 : x > y ? 1 : 0);
+  });
+  const mag = t.c.abs();
+  const body = keys.map((k) => texAtomPow(k, t.m[k], o)).join('');
+  if (!keys.length) return texNum(mag, o);
+  if (mag.isOne()) return body;
+  if (o.mode !== 'dec' && !mag.isInteger()) return '\\frac{' + (mag.n === 1n ? '' : String(mag.n)) + body + '}{' + mag.d + '}';
+  return texNum(mag, o) + body;
+}
+function texPoly(p, o) {
+  if (p.size === 0) return '0';
+  const terms = [...p.values()].sort(displayCmp);
+  return terms.map((t, i) => {
+    const neg = t.c.sign() < 0;
+    return (i === 0 ? (neg ? '-' : '') : (neg ? ' - ' : ' + ')) + texTerm(t, o);
+  }).join('');
+}
+function toTeX(e, opts = {}) {
+  const o = { mode: opts.mode || 'frac', precision: opts.precision === undefined ? 4 : opts.precision };
+  const c = e.constVal();
+  if (c !== null) return (c.sign() < 0 ? '-' : '') + texNum(c.abs(), o);
+  if (e.num.size === 1 && e.den.size === 1) {            // sin(u)/cos(u) prints as tan(u)
+    const nt = [...e.num.values()][0], dt = [...e.den.values()][0];
+    const nk = Object.keys(nt.m), dk = Object.keys(dt.m);
+    if (nk.length === 1 && dk.length === 1 && nt.m[nk[0]] === 1 && dt.m[dk[0]] === 1) {
+      const na = atomOf(nk[0]), da = atomOf(dk[0]);
+      if (na && da && na.kind === 'fn' && da.kind === 'fn' && na.fn === 'sin' && da.fn === 'cos' && na.arg.key() === da.arg.key()) {
+        const coef = nt.c.div(dt.c);
+        const targ = toTeX(na.arg, o);
+        const t = /\\frac|\\sqrt|\\left|\^\{/.test(targ) ? '\\tan\\left(' + targ + '\\right)' : '\\tan(' + targ + ')';
+        return coef.isOne() ? t : coef.neg().isOne() ? '-' + t : (coef.sign() < 0 ? '-' : '') + texNum(coef.abs(), o) + t;
+      }
+    }
+  }
+  const dc = pConstVal(e.den);
+  if (dc !== null && dc.isOne()) return texPoly(e.num, o);
+  let neg = '', num = e.num;
+  if (num.size === 1 && [...num.values()][0].c.sign() < 0) {   // -a/b, not (-a)/b
+    neg = '-';
+    num = new Map([...num.entries()].map(([k, t]) => [k, Object.assign({}, t, { c: t.c.neg() })]));
+  }
+  let den = e.den;
+  if (o.mode !== 'dec') {   // clear rational coefficients upward:  (1/2)/(xy) → 1/(2xy)
+    const bgcd = (a, b) => { while (b) { [a, b] = [b, a % b]; } return a; };
+    let L = 1n;
+    for (const t of [...num.values(), ...den.values()]) L = (L / bgcd(L, t.c.d)) * t.c.d;
+    if (L !== 1n) { const f = new Frac(L, 1n); num = pScale(num, f); den = pScale(den, f); }
+  }
+  return neg + '\\frac{' + texPoly(num, o) + '}{' + texPoly(den, o) + '}';
+}
+
 /* --------------------------------------------------------------- helpers */
 // "x=2, theta=pi/4" -> { x: Expr, theta: Expr }
 function parseAssignments(src) {
@@ -853,7 +948,7 @@ function numericEnv(env) {
 
 const toInput = (e) => display(e, { mode: 'frac', ascii: true });
 const api = {
-  Expr, E, display, toInput, parseExpr, parseAssignments, numericEnv,
+  Expr, E, display, toTeX, toInput, parseExpr, parseAssignments, numericEnv,
   sqrtExpr, sinExpr, cosExpr, applyFn, imagUnit,
   canonicalName, displayName, GREEK, FUNCTIONS,
   _internals: { pZero, pOne, pFromFrac, pAdd, pMul, pNormalize, pDivExact, atomOf, ATOMS },
