@@ -215,8 +215,7 @@ function singleRowNote(M, name) {
 function projectionSteps(r, M, name) {
   if (r.k === 0) return el('p', { class: 'note' }, `${name} has no nonzero column, so there are no steps: P is the zero matrix.`);
   const k = r.k;
-  const stage = (n, title, hint, ...body) => el('div', { class: 'subspace' },
-    el('h3', {}, `Step ${n}: ${title}`), hint ? el('p', { class: 'note' }, hint) : null, ...body);
+  const stage = stageEl;
   const inv = r.Ginv;
   return el('div', { class: 'projsteps' },
     stage(1, 'find an independent set of columns',
@@ -410,7 +409,52 @@ const charPolyTeX = (coefs) => {
   });
   return out || '0';
 };
-const charPolyLine = (T, coefs) => ml(tx`\det(\lambda I - ${T}) = ${charPolyTeX(coefs)}`);
+// polynomials from charPolyExpansion are stored constant term first
+const polyTeX = (p) => charPolyTeX(p.slice().reverse());
+const charPolyLine = (T, p) => ml(`\\det(${T} - \\lambda I) = ${polyTeX(p)}`);
+
+/* ------------------------------------------- det(A − λI), step by step */
+// true when TeX is a sum or difference at the top level, so it needs brackets inside a product
+function texIsSum(t) {
+  let depth = 0;
+  for (let k = 0; k < t.length; k++) {
+    const ch = t[k];
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    else if (ch === '}' || ch === ')' || ch === ']') depth--;
+    else if ((ch === '+' || ch === '-') && depth === 0 && k > 0) return true;
+  }
+  return false;
+}
+const wrapTeX = (t) => (texIsSum(t) || t.startsWith('-') ? `\\left(${t}\\right)` : t);
+// an entry of A − λI: a constant, or "a − λ" on the diagonal
+const lamEntryTeX = (p) => (p.length > 1 ? (p[0].isZero() ? '-\\lambda' : `${texOf(p[0])} - \\lambda`) : texOf(p[0]));
+const lamGridTeX = (M, env) => `\\begin{${env}} ${M.map((r) => r.map(lamEntryTeX).join(' & ')).join(' \\\\[0.4ex] ')} \\end{${env}}`;
+// "− r" written the natural way: λ − 2, λ + 3, λ − (1 + i)
+function minusTeX(r) {
+  const t = texOf(r);
+  return t.startsWith('-') ? `+ ${wrapTeX(texOf(r.neg()))}` : `- ${wrapTeX(t)}`;
+}
+const shiftTeX = (T, r) => (r.isZero() ? T : `${T} ${minusTeX(r)}I`);
+const rootFactorTeX = (r, m) => (r.isZero() ? '\\lambda' : `\\left(\\lambda ${minusTeX(r)}\\right)`) + (m > 1 ? `^{${m}}` : '');
+// the cofactor expansion  Σ ± entry · minor,  with the minor drawn by minorTeX
+function expansionTeX(terms, minorTeX) {
+  return terms.map((t, k) => {
+    let sign = t.sign, ent;
+    const m = minorTeX(t);
+    const bracketed = m.startsWith('\\left') || m.startsWith('\\begin');
+    if (t.entry.length > 1) ent = `\\left(${lamEntryTeX(t.entry)}\\right)`;
+    else {
+      let c = t.entry[0];
+      if (texOf(c).startsWith('-')) { sign = -sign; c = c.neg(); }
+      ent = wrapTeX(texOf(c));
+      if (ent === '1' && bracketed) ent = '';
+    }
+    const body = ent && !ent.endsWith('\\right)') && !bracketed ? `${ent}\\cdot ${m}` : `${ent}${m}`;
+    return k === 0 ? (sign < 0 ? '-' : '') + body : (sign < 0 ? ' - ' : ' + ') + body;
+  }).join('') || '0';
+}
+const stageEl = (n, title, hint, ...body) => el('div', { class: 'subspace' },
+  el('h3', {}, `Step ${n}: ${title}`), hint ? el('p', { class: 'note' }, hint) : null, ...body);
 
 const ops = {
   mul() { const A = readMatrix('A'), B = readMatrix('B'); const P = K.mul(A, B);
@@ -707,27 +751,32 @@ const ops = {
   },
   eigen() {
     const T = state.target, A = readMatrix(T);
-    card(`Eigenvalues & eigenvectors of ${T}`, ...eigenBody(K.eigen(A), T));
+    const e = K.eigen(A);
+    const x = K.charPolyExpansion(A);
+    card(`Eigenvalues & eigenvectors of ${T}`, ...eigenSummary(e, T, x),
+      el('details', { open: '' }, el('summary', {}, 'Show the steps'), ...eigenSteps(e, T, A, x)));
   },
   diag() {
     const T = state.target, A = readMatrix(T);
     const d = K.diagonalize(A);
+    const x = K.charPolyExpansion(A);
     if (!d.ok) {
       const e = d.eigen;
       if (!e.solved) {
         card(`Diagonalize ${T}`,
           el('p', {}, el('span', { class: 'badge warn' }, 'not solvable in closed form'),
             ` The characteristic polynomial has degree ${e.unsolvedDegree} with symbolic coefficients; there is no general formula for its roots.`),
-          el('p', {}, el('span', { class: 'label' }, 'Characteristic polynomial:'), charPolyLine(T, e.charPoly)),
-          el('p', { class: 'note' }, 'Give the symbols values in the Variables box and press Substitute to diagonalize a concrete matrix.'));
+          el('p', {}, el('span', { class: 'label' }, 'Characteristic polynomial:'), charPolyLine(T, x.poly)),
+          el('p', { class: 'note' }, 'Give the symbols values in the Variables box and press Substitute to diagonalize a concrete matrix.'),
+          el('details', { open: '' }, el('summary', {}, 'Show the steps'), ...eigenSteps(e, T, A, x)));
         return;
       }
       const bad = e.eigenvalues.filter((v) => v.geomMult < v.algMult);
       card(`Diagonalize ${T}`,
         el('p', {}, el('span', { class: 'badge no' }, 'not diagonalizable'),
-          ` ${T} has only ${e.geomTotal} linearly independent eigenvector${e.geomTotal === 1 ? '' : 's'} but is ${e.n}×${e.n}.`),
+          ` ${T} has only ${e.geomTotal} linearly independent eigenvector${e.geomTotal === 1 ? '' : 's'} but is ${e.n}×${e.n}, so there are not enough columns to build an invertible P.`),
         ...bad.map((v) => el('p', { class: 'note' }, eigLine(v), `: algebraic multiplicity ${v.algMult}, geometric multiplicity ${v.geomMult}.`)),
-        el('details', {}, el('summary', {}, 'Eigenvalue details'), ...eigenBody(e, T)));
+        el('details', { open: '' }, el('summary', {}, 'Show the steps'), ...eigenSteps(e, T, A, x)));
       return;
     }
     const kids = [];
@@ -741,7 +790,22 @@ const ops = {
       kids.push(el('p', { class: 'note' }, 'Consequence: ', ml(`${T}^k = PD^kP^{-1}`), ', where ', ml('D^k'), ' raises each diagonal entry to the k-th power.'));
       kids.push(assumptionNote(d.eigen.assumptions));
     }
-    kids.push(el('details', {}, el('summary', {}, 'Eigenvalue details'), ...eigenBody(d.eigen, T)));
+    // Step 5: assemble P and D
+    const n = d.eigen.n;
+    const last = [];
+    last.push(row(matrixEl(d.P, { caption: 'P' }), matrixEl(d.D, { caption: 'D' })));
+    if (d.exact) {
+      const inv = K.inverse(d.P);
+      last.push(el('p', { class: 'note' }, 'Invert P with Gauss–Jordan: ', ml('[\\,P \\mid I\\,] \\to [\\,I \\mid P^{-1}\\,]')),
+        row(matrixEl(inv.augmented, { aug: n, caption: cm('[\\,P \\mid I\\,]', '[P | I]') }), opSym('→'),
+          matrixEl(inv.reduced, { aug: n, caption: cm('[\\,I \\mid P^{-1}\\,]', '[I | P⁻¹]') })),
+        stepsDetails(inv.steps, { aug: n }));
+    }
+    last.push(el('p', { class: 'note' }, 'Because ', ml('Av_i = \\lambda_i v_i'), ' for every column, ', ml(`${T}P = PD`),
+      '; P is invertible since its columns are independent, so ', ml(`${T} = PDP^{-1}`), '.'));
+    kids.push(el('details', { open: '' }, el('summary', {}, 'Show the steps'), ...eigenSteps(d.eigen, T, A, x),
+      stageEl(5, 'assemble P and D',
+        'Put the eigenvectors in the columns of P, and each one’s eigenvalue in the same position on the diagonal of D.', ...last)));
     card(`Diagonalize ${T}`, ...kids);
   },
 };
@@ -758,9 +822,9 @@ function eigLine(v, mult) {
   const n = v.kind === 'numeric' ? null : approxNote(v.value);
   return el('span', {}, ml(`\\lambda = ${tex}${mult > 1 ? `\\;(\\times ${mult})` : ''}`), n ? el('span', { class: 'note approx' }, ' ' + n) : null);
 }
-function eigenBody(e, T) {
-  const kids = [];
-  kids.push(el('p', {}, el('span', { class: 'label' }, 'Characteristic polynomial:'), charPolyLine(T, e.charPoly)));
+// the answer in brief: polynomial and eigenvalues
+function eigenSummary(e, T, x) {
+  const kids = [el('p', {}, el('span', { class: 'label' }, 'Characteristic polynomial:'), charPolyLine(T, x.poly))];
   if (!e.solved) {
     kids.push(el('p', {}, el('span', { class: 'badge warn' }, 'no closed form'),
       ` The polynomial has degree ${e.unsolvedDegree} with symbolic coefficients. Closed-form roots exist only up to degree 2 here, so no eigenvalues can be produced.`));
@@ -768,20 +832,108 @@ function eigenBody(e, T) {
     return kids;
   }
   kids.push(el('p', {}, el('span', { class: 'label' }, 'Eigenvalues:'),
-    e.eigenvalues.flatMap((v, i) => [i ? "   " : "", eigLine(v, v.algMult)]),
+    e.eigenvalues.flatMap((v, i) => [i ? '   ' : '', eigLine(v, v.algMult)]),
     ' ', el('span', { class: e.diagonalizable ? 'badge ok' : 'badge no' }, e.diagonalizable ? 'diagonalizable' : 'not diagonalizable')));
   if (e.eigenvalues.some((v) => v.kind === 'numeric')) {
     kids.push(el('p', { class: 'note' }, 'The characteristic polynomial has degree ≥ 3 with no rational roots, so these eigenvalues and eigenvectors are numerical.'));
   }
-  for (const v of e.eigenvalues) {
-    kids.push(el('div', { class: 'eig' },
-      el('p', {}, eigLine(v), '   ',
-        el('span', { class: 'note' }, `algebraic multiplicity ${v.algMult}, geometric multiplicity ${v.geomMult}`),
-        v.geomMult < v.algMult ? el('span', { class: 'badge no', style: 'margin-left:8px' }, 'defective') : null),
-      row(el('span', { class: 'label' }, 'Eigenvectors, a basis of '), ml(`N(${T} - \\lambda I)`), vectorList(v.vectors, { name: 'v' }))));
-  }
   kids.push(assumptionNote(e.assumptions));
   return kids;
+}
+
+// Steps 1–4: A − λI, expand det(A − λI), solve det(A − λI) = 0, then the null space of each A − λᵢI
+function eigenSteps(e, T, A, x) {
+  const n = x.n;
+  const L = `${T} - \\lambda I`;
+  const stages = [];
+
+  // 1. subtract λ down the diagonal
+  stages.push(stageEl(1, `subtract λ from the diagonal of ${T}`,
+    'An eigenvalue λ is a number for which (A − λI)v = 0 has a nonzero solution v, i.e. A − λI is singular.',
+    row(ml(`${L} = ${lamGridTeX(x.shifted, 'bmatrix')}`))));
+
+  // 2. expand the determinant
+  const poly = polyTeX(x.poly);
+  const lines = [];
+  if (n === 1) {
+    lines.push(ml(`\\det(${L}) = ${lamEntryTeX(x.shifted[0][0])}`));
+  } else if (!x.terms) {
+    lines.push(el('p', { class: 'note' }, `A ${n}×${n} cofactor expansion has too many terms to show, so the polynomial is computed with the Faddeev–LeVerrier recurrence:`));
+    lines.push(ml(`\\det(${L}) = ${poly}`));
+  } else {
+    const minorEntry = (t) => {   // a 1×1 minor, as a factor
+      const p = t.minor[0][0];
+      return p.length > 1 ? `\\left(${lamEntryTeX(p)}\\right)` : wrapTeX(texOf(p[0]));
+    };
+    const first = n === 2 ? expansionTeX(x.terms, minorEntry) : expansionTeX(x.terms, (t) => lamGridTeX(t.minor, 'vmatrix'));
+    const eqs = [`\\det(${L}) &= ${first}`];
+    if (n > 2) {
+      const second = expansionTeX(x.terms, (t) => wrapTeX(polyTeX(t.minorDet)));
+      if (second !== first) eqs.push(`&= ${second}`);
+    }
+    eqs.push(`&= ${poly}`);
+    const skipped = n - x.terms.length;
+    lines.push(el('p', { class: 'note' }, n === 2
+      ? 'For a 2×2 matrix, det = ad − bc:'
+      : `Cofactor expansion along row ${x.row + 1}${x.row ? ' (the row with the most zeros)' : ''}: each entry times the determinant of what is left after deleting its row and column, with signs alternating + − + …${skipped ? ` Zero entries contribute nothing, so ${skipped === 1 ? 'one term drops' : `${skipped} terms drop`} out.` : ''}`));
+    lines.push(el('div', { class: 'tex-scroll' }, ml(`\\begin{aligned} ${eqs.join(' \\\\[1ex] ')} \\end{aligned}`)));
+  }
+  stages.push(stageEl(2, `expand the determinant  det(${T} − λI)`, null, ...lines,
+    el('p', { class: 'note' }, `This degree-${n} polynomial in λ is the characteristic polynomial of ${T}.`)));
+
+  // 3. solve det(A − λI) = 0
+  const solve = [];
+  const evs = e.eigenvalues;
+  if (!e.solved) {
+    solve.push(el('p', {}, el('span', { class: 'badge warn' }, 'no closed form'),
+      ` The roots of a degree-${e.unsolvedDegree} polynomial with symbolic coefficients have no general formula, so the steps stop here.`));
+  } else {
+    solve.push(el('p', {}, ml(`${poly} = 0`)));
+    const allExact = evs.every((v) => v.kind === 'exact') && evs.reduce((s, v) => s + v.algMult, 0) === n;
+    if (n === 2 && allExact && x.poly.length === 3) {
+      const [c, b] = x.poly;   // λ² + bλ + c
+      const disc = b.mul(b).sub(K.E(4).mul(c));
+      const negB = b.isZero() ? '' : texOf(b.neg());
+      solve.push(el('p', { class: 'note' }, 'Quadratic formula with ', ml(tx`a = 1,\; b = ${b},\; c = ${c}`), ':'));
+      const root = texOf(K.sqrtExpr(disc));
+      const raw = `\\sqrt{${texOf(disc)}}`;
+      solve.push(el('p', {}, ml(`\\lambda = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} = \\dfrac{${negB} \\pm ${raw}}{2}${root !== raw ? ` = \\dfrac{${negB} \\pm ${wrapTeX(root)}}{2}` : ''}`)));
+    } else if (n >= 3 && evs.some((v) => v.kind === 'exact' && v.value.constVal() !== null)) {
+      solve.push(el('p', { class: 'note' }, 'Rational roots are found by testing candidates p/q and dividing each root out of the polynomial; a quadratic left over is solved with the quadratic formula.'));
+    }
+    if (allExact) {
+      const factors = evs.map((v) => rootFactorTeX(v.value, v.algMult)).join('');
+      solve.push(el('p', {}, el('span', { class: 'note' }, 'Factored: '), ml(`\\det(${L}) = ${n % 2 ? '-' : ''}${factors}`)));
+    } else {
+      solve.push(el('p', { class: 'note' }, 'What remains has no rational roots and no closed form here, so its roots are approximated numerically.'));
+    }
+    solve.push(row(el('span', { class: 'label' }, 'So'), ml(evs.map((v, i) => `\\lambda_{${i + 1}} ${v.kind === 'numeric' ? `\\approx ${texComplex(v.approx)}` : `= ${texOf(v.value)}`}${v.algMult > 1 ? `\\;(\\times ${v.algMult})` : ''}`).join(',\\quad '))));
+  }
+  stages.push(stageEl(3, `solve  det(${T} − λI) = 0`, null, ...solve));
+  if (!e.solved) return stages;
+
+  // 4. eigenvectors: the null space of A − λᵢI
+  const vecs = evs.map((v, i) => {
+    const head = el('p', {}, ml(`\\lambda_{${i + 1}} ${v.kind === 'numeric' ? `\\approx ${texComplex(v.approx)}` : `= ${texOf(v.value)}`}`), '   ',
+      el('span', { class: 'note' }, `algebraic multiplicity ${v.algMult}, geometric multiplicity ${v.geomMult}`),
+      v.geomMult < v.algMult ? el('span', { class: 'badge no', style: 'margin-left:8px' }, 'defective') : null);
+    if (v.kind !== 'exact') {
+      return el('div', { class: 'eig' }, head,
+        row(el('span', { class: 'label' }, 'Eigenvectors (numerical), a basis of '), ml(`N(${T} - \\lambda_{${i + 1}} I)`), vectorList(v.vectors, { name: 'v' })));
+    }
+    const M = K.sub(A, K.scaleMat(K.identity(n), v.value));
+    const red = K.rref(M, { steps: true });
+    const shift = shiftTeX(T, v.value);
+    return el('div', { class: 'eig' }, head,
+      row(matrixEl(M, { caption: cm(shift, `${T} − (${fmtPlain(v.value)})I`) }), opSym('→'),
+        matrixEl(red.R, { caption: cm(`\\operatorname{rref}(${shift})`, 'rref'), pivots: pivotCells(red.pivots) }),
+        opSym('⟹'), vectorList(v.vectors, { name: 'v' })),
+      stepsDetails(red.steps));
+  });
+  stages.push(stageEl(4, 'find the eigenvectors',
+    `For each eigenvalue, row-reduce ${T} − λI and solve (${T} − λI)v = 0: set one free variable to 1 and the others to 0. The number of free columns is the geometric multiplicity.`,
+    ...vecs));
+  return stages;
 }
 
 /* --------------------------------------------------------------- examples */

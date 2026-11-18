@@ -17,9 +17,9 @@ A = [ cos θ  −sin θ ]        det A = 1          λ = cos θ ± i·sin θ
 |---|---|
 | **Matrix multiplication** | `A × B`, `B × A`, plus `A + B`, `A − B`, transpose. Dimension mismatches are reported in plain language. |
 | **RREF** | Pivot columns highlighted, rank and free columns reported, every row operation shown step by step. |
-| **Eigenvalues & eigenvectors** | Characteristic polynomial via Faddeev–LeVerrier. Rational roots are found exactly; degree‑2 factors are solved in closed form, so irrational and complex eigenvalues come out exact (`(1±√5)/2`, `±i`). Algebraic vs geometric multiplicity reported, defective eigenvalues flagged. |
+| **Eigenvalues & eigenvectors** | Worked steps: form `A − λI`, expand `det(A − λI)` by cofactors (up to 4×4; Faddeev–LeVerrier beyond), solve `det(A − λI) = 0` (quadratic formula for 2×2, factored form when exact), then row-reduce each `A − λᵢI` for its eigenvectors. Rational roots are found exactly; degree‑2 factors are solved in closed form, so irrational and complex eigenvalues come out exact (`(1±√5)/2`, `±i`). Algebraic vs geometric multiplicity reported, defective eigenvalues flagged. |
 | **Four fundamental subspaces** | Column space, row space, null space, left null space — bases, dimensions, and the rank–nullity check. |
-| **Diagonalization** | `A = P D P⁻¹`, verified exactly. Non-diagonalizable matrices get an explanation of which λ has geometric < algebraic multiplicity. |
+| **Diagonalization** | `A = P D P⁻¹`, verified exactly, with the same eigenvalue steps plus building P, D and P⁻¹ (Gauss–Jordan). Non-diagonalizable matrices get an explanation of which λ has geometric < algebraic multiplicity. |
 | **Gauss–Jordan inverse** | Shows `[A │ I] → [I │ A⁻¹]` with every row operation. Singular matrices identified. |
 | **Determinant** | Row reduction (with the triangular form, swap count and diagonal product) for numbers; division-free cofactor expansion for symbolic matrices, so the answer stays a clean polynomial. |
 | **Dot & cross product** | Norms, the angle between vectors, orthogonality check, and the parallelogram area. |

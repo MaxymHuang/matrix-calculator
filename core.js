@@ -215,6 +215,64 @@ function charPoly(A) {
   }
   return coef.reverse();
 }
+// det(A − λI) by cofactor expansion, keeping every piece so the work can be shown.
+// Polynomials in λ are arrays of Expr coefficients, constant term first.
+const pTrim = (p) => { const q = p.slice(); while (q.length > 1 && q[q.length - 1].isZero()) q.pop(); return q; };
+const pAdd = (p, q) => pTrim(Array.from({ length: Math.max(p.length, q.length) }, (_, k) => (p[k] || Expr.ZERO).add(q[k] || Expr.ZERO)));
+const pNeg = (p) => p.map((c) => c.neg());
+function pMul(p, q) {
+  const r = Array.from({ length: p.length + q.length - 1 }, () => Expr.ZERO);
+  p.forEach((a, i) => { if (!a.isZero()) q.forEach((b, j) => { r[i + j] = r[i + j].add(a.mul(b)); }); });
+  return pTrim(r);
+}
+const pIsZero = (p) => p.every((c) => c.isZero());
+const minorOf = (M, i, j) => M.filter((_, r) => r !== i).map((r) => r.filter((_, c) => c !== j));
+function polyDet(M) {
+  const n = M.length;
+  const memo = new Map();
+  const go = (r, mask) => {
+    if (r === n) return [Expr.ONE];
+    const key = `${r}|${mask}`;
+    if (memo.has(key)) return memo.get(key);
+    let acc = [Expr.ZERO], sign = 1;
+    for (let c = 0; c < n; c++) {
+      if (mask & (1 << c)) continue;
+      if (!pIsZero(M[r][c])) {
+        const t = pMul(M[r][c], go(r + 1, mask | (1 << c)));
+        acc = pAdd(acc, sign > 0 ? t : pNeg(t));
+      }
+      sign = -sign;
+    }
+    memo.set(key, acc);
+    return acc;
+  };
+  return go(0, 0);
+}
+const EXPANSION_MAX = 4;   // beyond 4×4 the expansion has too many terms to be worth reading
+function charPolyExpansion(A) {
+  const n = A.length;
+  const shifted = A.map((r, i) => r.map((x, j) => (i === j ? [x, Expr.ONE.neg()] : [x])));
+  if (n > EXPANSION_MAX) {
+    const cp = charPoly(A).slice().reverse();   // det(λI − A), constant first
+    return { n, shifted, terms: null, row: null, poly: n % 2 ? pNeg(cp) : cp };
+  }
+  // expand along the row with the most zeros (the diagonal entry always contains λ)
+  let row = 0, most = -1;
+  A.forEach((r, i) => { const z = r.filter((x, j) => j !== i && x.isZero()).length; if (z > most) { most = z; row = i; } });
+  const terms = [];
+  let poly = [Expr.ZERO];
+  for (let j = 0; j < n; j++) {
+    const entry = shifted[row][j];
+    if (pIsZero(entry)) continue;
+    const minor = minorOf(shifted, row, j);
+    const minorDet = polyDet(minor);
+    const sign = (row + j) % 2 ? -1 : 1;
+    terms.push({ i: row, j, sign, entry, minor, minorDet });
+    const t = pMul(entry, minorDet);
+    poly = pAdd(poly, sign > 0 ? t : pNeg(t));
+  }
+  return { n, shifted, terms, row, poly };
+}
 const fPolyEval = (c, x) => c.reduce((acc, k) => acc.mul(x).add(k), Frac.ZERO);
 function fPolyDeflate(c, r) {
   const out = [];
@@ -413,9 +471,9 @@ function eigen(A) {
   const geomTotal = evs.reduce((s, e) => s + e.geomMult, 0);
   const assumptions = [];
   for (const e of evs) for (const a of e.assumptions || []) if (!assumptions.some((x) => x.eq(a))) assumptions.push(a);
-  return { n, charPoly: cp, eigenvalues: evs, symbolic, unsolvedDegree,
-    solved: unsolvedDegree === 0 || !symbolic,
-    diagonalizable: unsolvedDegree === 0 && geomTotal === n, geomTotal, assumptions };
+  const solved = unsolvedDegree === 0 || !symbolic;   // numeric roots still count as solved
+  return { n, charPoly: cp, eigenvalues: evs, symbolic, unsolvedDegree, solved,
+    diagonalizable: solved && geomTotal === n, geomTotal, assumptions };
 }
 
 /* ------------------------------------------------ diagonalization A=PDP⁻¹ */
@@ -640,7 +698,7 @@ const api = {
   Expr, E, display, sqrtExpr, Frac, F, C, isqrt, simplifySqrt,
   dims, zeros, identity, clone, transpose, add, sub, mul, scaleMat, trace, parseMatrix, augment,
   isSymbolic, substMatrix, matrixVars,
-  rref, det, detCofactor, inverse, nullspace, fourSubspaces, charPoly, rootsNumeric,
+  rref, det, detCofactor, inverse, nullspace, fourSubspaces, charPoly, charPolyExpansion, rootsNumeric,
   crref, complexNullspace, complexInverse, eigen, diagonalize, approxOf, quadraticRoots,
   asVector, dot, cross, norm,
   projectOntoVector, projectOntoColumnSpace, projectionMatrix,

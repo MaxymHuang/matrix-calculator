@@ -185,6 +185,7 @@ summary:hover { color: var(--fern-dark); }
 .tex { color: var(--fg); }
 .tex .katex { font-size: 1.08em; }
 .tex-line { display: inline-block; vertical-align: middle; margin: 2px 0; }
+.tex-scroll { overflow-x: auto; padding: 4px 4px 8px; }
 .big .tex-line .katex { font-size: 1.35em; }
 .cap .tex .katex, .desc .tex .katex { font-size: 1em; }
 .katex-error { color: var(--err); font-family: var(--mono); font-size: 13px; }
